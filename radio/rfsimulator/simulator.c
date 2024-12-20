@@ -342,7 +342,7 @@ static void fullwrite(void* pub_sock, void *_buf, ssize_t count, rfsimulator_sta
         return;
       }
     }
-    LOG_D(HW, "Successfully sent %d bytes.\n", l);
+    LOG_I(HW, "Successfully sent %d bytes \n");
 
     count -= l;
     buf += l;
@@ -695,7 +695,7 @@ static int startServer(openair0_device *device) {
       zmq_msg_close(&event_msg);
 
       if (event == ZMQ_EVENT_CONNECTED) {
-        LOG_D(HW, "Publisher socket connected \n");
+        LOG_I(HW, "Publisher socket connected \n");
         pub_connected = true;
       }
     } else {
@@ -710,7 +710,7 @@ static int startServer(openair0_device *device) {
       zmq_msg_close(&event_msg);
 
       if (event == ZMQ_EVENT_CONNECTED) {
-        LOG_D(HW, "Subscriber socket connected \n");
+        LOG_I(HW, "Subscriber socket connected \n");
         sub_connected = true;
       }
     } else {
@@ -731,13 +731,13 @@ static int startServer(openair0_device *device) {
 // Sending Current time only one time.
 
   c16_t v= {0};
-  // nb_ue++;
   void *samplesVoid[t->tx_num_channels];
 
   for ( int i=0; i < t->tx_num_channels; i++)
     samplesVoid[i]=(void *)&v;
 
   rfsimulator_write_internal(t, t->lastWroteTS > 1 ? t->lastWroteTS - 1 : 0, samplesVoid, 1, t->tx_num_channels, 1, false);
+
 
   // buffer_t *b = &t->buf[0];
   // if (b->channel_model)
@@ -843,7 +843,7 @@ static int startClient(openair0_device *device) {
       zmq_msg_close(&event_msg);
 
       if (event == ZMQ_EVENT_CONNECTED) {
-        LOG_D(HW, "Publisher socket connected\n");
+        LOG_I(HW, "Publisher socket connected\n");
         pub_connected = true;
       }
     } else {
@@ -858,7 +858,7 @@ static int startClient(openair0_device *device) {
       zmq_msg_close(&event_msg);
 
       if (event == ZMQ_EVENT_CONNECTED) {
-        LOG_D(HW, "Subscriber socket connected\n");
+        LOG_I(HW, "Subscriber socket connected\n");
         sub_connected = true;
       }
     } else {
@@ -916,7 +916,9 @@ static int rfsimulator_write_internal(rfsimulator_state_t *t, openair0_timestamp
   if (!alreadyLocked)
     pthread_mutex_lock(&Sockmutex);
 
-  LOG_D(HW,"sending %d samples at time: %ld, nbAnt %d\n", nsamps, timestamp, nbAnt);
+  LOG_I(HW,"sending %d samples at time: %ld, nbAnt %d\n", nsamps, timestamp, nbAnt);
+
+  // LOG_D(HW,"sending %d samples at time: %ld, nbAnt %d\n", nsamps, timestamp, nbAnt);
 
   // for (int i=0; i<FD_SETSIZE; i++) {
   //   buffer_t *b=&t->buf[i];
@@ -981,6 +983,7 @@ static int rfsimulator_write_internal(rfsimulator_state_t *t, openair0_timestamp
 }
 
 static int rfsimulator_write(openair0_device *device, openair0_timestamp timestamp, void **samplesVoid, int nsamps, int nbAnt, int flags) {
+  // LOG_I(HW,"Enter rfsimulator_write! \n");
   return rfsimulator_write_internal(device->priv, timestamp, samplesVoid, nsamps, nbAnt, flags, false);
 }
 
@@ -992,8 +995,8 @@ static bool flushInput(rfsimulator_state_t *t, int timeout, int nsamps_for_initi
 
   zmq_pollitem_t * items = t->pollitems;
   int rc = zmq_poll(items, 1, timeout);
-
-
+   LOG_I(HW, "rc = %d ! \n", rc);
+  
   if (rc < 0) {
       if (errno == EINTR || errno == ETERM) {
       LOG_W(HW, "ZMQ poll interrupted\n");
@@ -1016,6 +1019,20 @@ static bool flushInput(rfsimulator_state_t *t, int timeout, int nsamps_for_initi
 
   // for (int nbEv = 0; nbEv < nfds; ++nbEv) {
     // int fd=events[nbEv].data.fd;
+
+    //BroadCasting Current time 
+    // if (t->typeStamp == ENB_MAGICDL) {
+
+    //   c16_t v= {0};
+    //   // nb_ue++;
+    //   void *samplesVoid[t->tx_num_channels];
+
+    //   for ( int i=0; i < t->tx_num_channels; i++)
+    //     samplesVoid[i]=(void *)&v;
+
+    //   rfsimulator_write_internal(t, t->lastWroteTS > 1 ? t->lastWroteTS - 1 : 0, samplesVoid, 1, t->tx_num_channels, 1, false);
+
+    // }
 
     if (items[0].revents & ZMQ_POLLIN) {
      
@@ -1053,12 +1070,12 @@ static bool flushInput(rfsimulator_state_t *t, int timeout, int nsamps_for_initi
 
       //receiving topic 
       char topic[256] = {0};
-      //receiving data ( iq samples )
       zmq_recv(t->sub_sock, topic,sizeof(topic) , 0);
       topic[sizeof(topic) - 1] = '\0';
+      //receiving data ( iq samples )
       ssize_t sz = zmq_recv(t->sub_sock, b->transferPtr, blockSz, ZMQ_DONTWAIT);
       // LOG_I(HW, "Socket rcv %zd bytes\n", sz);    
-      LOG_D(HW, "Received on topic %s , nbr %zd bytes\n", topic, sz);
+      LOG_I(HW, "Received on topic %s , nbr %zd bytes\n", topic, sz);
 
       if ( sz < 0 ) {
         if ( errno != EAGAIN ) {
@@ -1067,7 +1084,7 @@ static bool flushInput(rfsimulator_state_t *t, int timeout, int nsamps_for_initi
         }
       }
       if (sz > 0 ) {
-      LOG_D(HW, "Socket rcv %zd bytes\n", sz);
+      LOG_I(HW, "Socket rcv %zd bytes\n", sz);
       AssertFatal((b->remainToTransfer-=sz) >= 0, "");
       b->transferPtr+=sz;
 
@@ -1076,11 +1093,13 @@ static bool flushInput(rfsimulator_state_t *t, int timeout, int nsamps_for_initi
 
       // check the header and start block transfer
       if ( b->headerMode==true && b->remainToTransfer==0) {
-        AssertFatal( (t->typeStamp == UE_MAGICDL  && b->th.magic==ENB_MAGICDL) ||
-                     (t->typeStamp == ENB_MAGICDL && b->th.magic==UE_MAGICDL), "Socket Error in protocol");
+        // AssertFatal( (t->typeStamp == UE_MAGICDL  && b->th.magic==ENB_MAGICDL) ||
+        //              (t->typeStamp == ENB_MAGICDL && b->th.magic==UE_MAGICDL), "Socket Error in protocol");
         b->headerMode=false;
-
+        LOG_I(HW,"b->th.timestamp : %d \n", b->th.timestamp);
+        LOG_I(HW,"b->th.magic : %d \n", b->th.magic);
         if ( t->nextRxTstamp == 0 ) { // First block in UE, resync with the eNB current TS
+        LOG_I(HW, "SYNCING WITH gNb ! \n");
           t->nextRxTstamp=b->th.timestamp> nsamps_for_initial ?
                            b->th.timestamp -  nsamps_for_initial :
                            0;
@@ -1169,11 +1188,16 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
         if ( b->circularBuf )
           if ( t->nextRxTstamp+nsamps > b->lastReceivedTS ) {
             have_to_wait=true;
-            break;
+            // LOG_I(HW,"have to wait %d !\n", have_to_wait);
+            // break;
           }
       // }
 
       if (have_to_wait) {
+        // LOG_D(HW,
+        //       "Waiting on socket, current last ts: %ld, expected at least : %ld\n",
+        //       b->lastReceivedTS,
+        //       t->nextRxTstamp + nsamps);
         LOG_D(HW,
               "Waiting on socket, current last ts: %ld, expected at least : %ld\n",
               b->lastReceivedTS,
@@ -1181,6 +1205,8 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
         flushInput(t, 3, nsamps);
       }
     } while (have_to_wait);
+
+      
   }
 
   // Clear the output buffer
