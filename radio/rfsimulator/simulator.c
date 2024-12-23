@@ -342,7 +342,7 @@ static void fullwrite(void* pub_sock, void *_buf, ssize_t count, rfsimulator_sta
         return;
       }
     }
-    LOG_I(HW, "Successfully sent %d bytes \n");
+    LOG_I(HW, "Successfully sent %d bytes \n", l);
 
     count -= l;
     buf += l;
@@ -738,13 +738,12 @@ static int startServer(openair0_device *device) {
 
   rfsimulator_write_internal(t, t->lastWroteTS > 1 ? t->lastWroteTS - 1 : 0, samplesVoid, 1, t->tx_num_channels, 1, false);
 
-
   // buffer_t *b = &t->buf[0];
   // if (b->channel_model)
   //   b->channel_model->start_TS = t->lastWroteTS;
 
   // nb_ue=2;
-  // LOG_I(HW, "rfsimulator: StartServer Ends\n");
+  LOG_I(HW, "rfsimulator: StartServer Ends\n");
 
   // AssertFatal(false, "error StartServer\n");
 
@@ -876,7 +875,7 @@ static int startClient(openair0_device *device) {
 
 
 
-  // LOG_I(HW, "rfsimulator: Start Client Ends\n");
+  LOG_I(HW, "rfsimulator: Start Client Ends\n");
 
   // AssertFatal(false, "error StartClient\n");
 
@@ -916,7 +915,7 @@ static int rfsimulator_write_internal(rfsimulator_state_t *t, openair0_timestamp
   if (!alreadyLocked)
     pthread_mutex_lock(&Sockmutex);
 
-  LOG_I(HW,"sending %d samples at time: %ld, nbAnt %d\n", nsamps, timestamp, nbAnt);
+  // LOG_I(HW,"sending %d samples at time: %ld, nbAnt %d\n", nsamps, timestamp, nbAnt);
 
   // LOG_D(HW,"sending %d samples at time: %ld, nbAnt %d\n", nsamps, timestamp, nbAnt);
 
@@ -1084,20 +1083,24 @@ static bool flushInput(rfsimulator_state_t *t, int timeout, int nsamps_for_initi
         }
       }
       if (sz > 0 ) {
-      LOG_I(HW, "Socket rcv %zd bytes\n", sz);
+      // LOG_I(HW, "Socket rcv %zd bytes\n", sz);
+      // LOG_D(HW, "Socket rcv %zd bytes\n", sz);
       AssertFatal((b->remainToTransfer-=sz) >= 0, "");
       b->transferPtr+=sz;
+      // LOG_I(HW, "Here ! \n ");
 
       if (b->transferPtr==b->circularBufEnd )
         b->transferPtr=(char *)b->circularBuf;
 
       // check the header and start block transfer
       if ( b->headerMode==true && b->remainToTransfer==0) {
+        // LOG_I(HW, "Receiving header ! \n ");
+
         // AssertFatal( (t->typeStamp == UE_MAGICDL  && b->th.magic==ENB_MAGICDL) ||
         //              (t->typeStamp == ENB_MAGICDL && b->th.magic==UE_MAGICDL), "Socket Error in protocol");
         b->headerMode=false;
-        LOG_I(HW,"b->th.timestamp : %d \n", b->th.timestamp);
-        LOG_I(HW,"b->th.magic : %d \n", b->th.magic);
+        // LOG_I(HW,"b->th.timestamp : %d \n", b->th.timestamp);
+        // LOG_I(HW,"b->th.magic : %d \n", b->th.magic);
         if ( t->nextRxTstamp == 0 ) { // First block in UE, resync with the eNB current TS
         LOG_I(HW, "SYNCING WITH gNb ! \n");
           t->nextRxTstamp=b->th.timestamp> nsamps_for_initial ?
@@ -1147,9 +1150,14 @@ static bool flushInput(rfsimulator_state_t *t, int timeout, int nsamps_for_initi
       }
 
       if ( b->headerMode==false ) {
+        // LOG_I(HW, "Receiving data ! \n ");
+
         if ( ! b->trashingPacket ) {
+          // LOG_I(HW, "Not trashing packet ! \n ");
           b->lastReceivedTS=b->th.timestamp+b->th.size-byteToSample(b->remainToTransfer,b->th.nbAnt);
-          LOG_D(HW,"UEsock: Set b->lastReceivedTS %ld\n", b->lastReceivedTS);
+          // LOG_I(HW,"UEsock: Set b->lastReceivedTS %ld\n", b->lastReceivedTS);
+
+          // LOG_D(HW,"UEsock: Set b->lastReceivedTS %ld\n", b->lastReceivedTS);
         }
 
         if ( b->remainToTransfer==0) {
@@ -1173,7 +1181,9 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
   }
 
   rfsimulator_state_t *t = device->priv;
-  LOG_D(HW, "Enter rfsimulator_read, expect %d samples, will release at TS: %ld, nbAnt %d\n", nsamps, t->nextRxTstamp+nsamps, nbAnt);
+  // LOG_I(HW, "Enter rfsimulator_read, expect %d samples, will release at TS: %ld, nbAnt %d\n", nsamps, t->nextRxTstamp+nsamps, nbAnt);
+
+  // LOG_D(HW, "Enter rfsimulator_read, expect %d samples, will release at TS: %ld, nbAnt %d\n", nsamps, t->nextRxTstamp+nsamps, nbAnt);
   // deliver data from received data
  
   if (t->buf[0].circularBuf != NULL ) {
@@ -1198,7 +1208,7 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
         //       "Waiting on socket, current last ts: %ld, expected at least : %ld\n",
         //       b->lastReceivedTS,
         //       t->nextRxTstamp + nsamps);
-        LOG_D(HW,
+        LOG_I(HW,
               "Waiting on socket, current last ts: %ld, expected at least : %ld\n",
               b->lastReceivedTS,
               t->nextRxTstamp + nsamps);
@@ -1214,8 +1224,8 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
     memset(samplesVoid[a],0,sampleToByte(nsamps,1));
 
   // Add all input nodes signal in the output buffer
-  for (int sock=0; sock<FD_SETSIZE; sock++) {
-    buffer_t *ptr=&t->buf[sock];
+  // for (int sock=0; sock<FD_SETSIZE; sock++) {
+    buffer_t *ptr=&t->buf[0];
 
     if ( ptr->circularBuf ) {
       bool reGenerateChannel=false;
@@ -1236,6 +1246,7 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
                      nsamps,
                      t->nextRxTstamp,
                      CirSize);
+          // LOG_I(HW, "Apply channel modeling\n");
         }
         else { // no channel modeling
           
@@ -1257,7 +1268,7 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
         } // end of no channel modeling
       } // end for a (number of rx antennas)
     }
-  }
+  // }
 
   *ptimestamp = t->nextRxTstamp; // return the time of the first sample
   t->nextRxTstamp+=nsamps;

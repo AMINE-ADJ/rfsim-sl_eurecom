@@ -4,14 +4,21 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
-            "name": "(gdb) Launch",
+            "name": "(gdb) Launch", 
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/cmake_targets/ran_build/build/lte-softmodem",
+            "program": "${workspaceFolder}/cmake_targets/ran_build/build/nr-uesoftmodem",
             "args": [
-                "-O", "../ci-scripts/conf_files/rcc.band7.tm1.nfapi.conf",
-                "--noS1"
+                // "-O", "../ci-scripts/conf_files/rcc.band7.tm1.nfapi.conf",
+                // "--noS1"
+
+                // "RFSIMULATOR=127.0.0.1", 
+                "--rfsim", 
+                "-O", "/mnt/Travail/PFE_Eurecom/Dev/Original/OAI_RFSIM_test_v2.1/ue1.conf",
+                "--sl-mode", "2",
+                "--sa"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/cmake_targets",
@@ -19,6 +26,7 @@
             "externalConsole": false,
             "MIMode": "gdb",
             "miDebuggerPath": "${workspaceFolder}/cmake_targets/sudo-gdb",
+            // "miDebuggerPath": "/usr/bin/gdb",
             "setupCommands": [
                 {
                     "description": "Enable pretty-printing for gdb",
