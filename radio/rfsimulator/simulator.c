@@ -1188,7 +1188,7 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
   // LOG_D(HW, "Enter rfsimulator_read, expect %d samples, will release at TS: %ld, nbAnt %d\n", nsamps, t->nextRxTstamp+nsamps, nbAnt);
   // deliver data from received data
   
-// if ( t->typeStamp == UE_MAGICDL || t->typeStamp == ENB_MAGICDL && first_read == false) { 
+if ( t->typeStamp == UE_MAGICDL || t->typeStamp == ENB_MAGICDL && first_read == false) { 
   if (t->buf[0].circularBuf != NULL) {
 
     bool have_to_wait;
@@ -1222,7 +1222,7 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
 
       
   }
-  // }
+  }
 
   // Clear the output buffer
   for (int a=0; a<nbAnt; a++)
