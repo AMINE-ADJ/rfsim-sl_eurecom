@@ -1278,7 +1278,7 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
       
   }
   }
-  }
+  
   // Clear the output buffer
   for (int a=0; a<nbAnt; a++)
     memset(samplesVoid[a],0,sampleToByte(nsamps,1));
