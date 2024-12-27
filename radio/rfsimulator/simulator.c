@@ -116,6 +116,7 @@ static telnetshell_cmddef_t *setmodel_cmddef = &(rfsimu_cmdarray[1]);
 
 static telnetshell_vardef_t rfsimu_vardef[] = {{"", 0, 0, NULL}};
 pthread_mutex_t Sockmutex;
+unsigned int nb_ue = 0;
 
 typedef c16_t sample_t; // 2*16 bits complex number
 
@@ -311,7 +312,8 @@ static void fullwrite(void* pub_sock, void *_buf, ssize_t count, rfsimulator_sta
 
   char *buf = _buf;
   ssize_t l;
-  //Sending topic
+  //Sending topic and data
+  while (count) {
   if (t->typeStamp == ENB_MAGICDL){
     char topic[] = "downlink";
     zmq_send(pub_sock, topic, strlen(topic), ZMQ_SNDMORE);
@@ -321,7 +323,7 @@ static void fullwrite(void* pub_sock, void *_buf, ssize_t count, rfsimulator_sta
     zmq_send(pub_sock, topic, strlen(topic), ZMQ_SNDMORE);
   }
 
-  while (count) {
+  
     l = zmq_send(pub_sock, buf, count, ZMQ_DONTWAIT);
 
     if (l == 0) {
@@ -674,6 +676,9 @@ static int startServer(openair0_device *device) {
   const char *topic = "uplink";
   rc = zmq_setsockopt(t->sub_sock, ZMQ_SUBSCRIBE, topic, strlen(topic));
   AssertFatal(rc == 0, "Failed to subscribe to topic");
+  const char *topic2 = "join";
+  rc = zmq_setsockopt(t->sub_sock, ZMQ_SUBSCRIBE, topic2, strlen(topic2));
+  AssertFatal(rc == 0, "Failed to subscribe to topic");
   size_t fd_size = sizeof(t->fd_pub_sock);
   rc = zmq_getsockopt(t->pub_sock, ZMQ_FD, &t->fd_pub_sock, &fd_size);
   AssertFatal(rc == 0, "Cannot get fd for pub_sock");
@@ -730,13 +735,16 @@ static int startServer(openair0_device *device) {
 
 // Sending Current time only one time.
 
-  c16_t v= {0};
-  void *samplesVoid[t->tx_num_channels];
 
-  for ( int i=0; i < t->tx_num_channels; i++)
-    samplesVoid[i]=(void *)&v;
+  // c16_t v= {0};
+  // // nb_ue++;
+  // void *samplesVoid[t->tx_num_channels];
 
-  rfsimulator_write_internal(t, t->lastWroteTS > 1 ? t->lastWroteTS - 1 : 0, samplesVoid, 1, t->tx_num_channels, 1, false);
+
+  // for ( int i=0; i < t->tx_num_channels; i++)
+  //   samplesVoid[i]=(void *)&v;
+
+  // rfsimulator_write_internal(t, t->lastWroteTS > 1 ? t->lastWroteTS - 1 : 0, samplesVoid, 1, t->tx_num_channels, 1, false);
 
   // buffer_t *b = &t->buf[0];
   // if (b->channel_model)
@@ -870,7 +878,11 @@ static int startClient(openair0_device *device) {
   LOG_D(HW, "rfsimulator: connection established\n");
   zmq_close(pub_monitor);
   zmq_close(sub_monitor);
-
+  char jointopic[] = "join";
+  char deviceid[]= "1";
+  zmq_send(t->pub_sock, jointopic, strlen(jointopic), ZMQ_SNDMORE);
+  zmq_send(t->pub_sock, deviceid, strlen(deviceid), 0);
+  usleep(20000);
   allocCirBuf(t, t->fd_sub_sock);
 
 
@@ -1037,16 +1049,40 @@ static bool flushInput(rfsimulator_state_t *t, int timeout, int nsamps_for_initi
 
     if (items[0].revents & ZMQ_POLLIN) {
      
-      // if ( events[nbEv].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP) ) {
-      //   socketError(t,fd);
-      //   continue;
-      // }
+      char topic[256];
+      int cap = sizeof(topic);
+      int tsize= zmq_recv(t->sub_sock, topic,cap-1 , 0);
+      topic[tsize < cap ? tsize : cap - 1] = '\0';
+      if (strncasecmp(topic, "join", 3) == 0){
+        if ( t->typeStamp == ENB_MAGICDL ) {
+          char deviceid[256];
+          int cap = sizeof(deviceid);
+          int idsize= zmq_recv(t->sub_sock, deviceid,cap-1 , 0);
+          deviceid[idsize < cap ? idsize : cap - 1] = '\0';
+          // char topic[256];
+          // int cap = sizeof(topic);
+          // int tsize= zmq_recv(t->sub_sock, topic,cap-1 , 0);
+          // topic[tsize < cap ? tsize : cap - 1] = '\0';
+          LOG_I(HW, "A client connects: %s, sending the current time\n",deviceid);
+          c16_t v= {0};
+          nb_ue++;
+          void *samplesVoid[t->tx_num_channels];
+
+          for ( int i=0; i < t->tx_num_channels; i++)
+            samplesVoid[i]=(void *)&v;
+
+          rfsimulator_write_internal(t, t->lastWroteTS > 1 ? t->lastWroteTS-1 : 0,
+                                    samplesVoid, 1,
+                                    t->tx_num_channels, 1, false);
+              return rc > 0;
+        }
+      }
 
       buffer_t *b=&t->buf[0];
 
       if ( b->circularBuf == NULL ) {
         LOG_E(HW, "received data on not connected socket \n");
-        // continue;
+        return rc > 0;
       }
 
       ssize_t blockSz;
@@ -1070,10 +1106,12 @@ static bool flushInput(rfsimulator_state_t *t, int timeout, int nsamps_for_initi
       //   continue;
 
       //receiving topic 
-      char topic[256] = {0};
-      zmq_recv(t->sub_sock, topic,sizeof(topic) , 0);
-      topic[sizeof(topic) - 1] = '\0';
-      //receiving data ( iq samples )
+
+      // char topic[256] = {0};
+      // //receiving data ( iq samples )
+      // zmq_recv(t->sub_sock, topic,sizeof(topic) , 0);
+      // topic[sizeof(topic) - 1] = '\0';
+
       ssize_t sz = zmq_recv(t->sub_sock, b->transferPtr, blockSz, ZMQ_DONTWAIT);
       // LOG_I(HW, "Socket rcv %zd bytes\n", sz);    
       LOG_I(HW, "Received on topic %s , nbr %zd bytes\n", topic, sz);
@@ -1187,9 +1225,26 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
 
   // LOG_D(HW, "Enter rfsimulator_read, expect %d samples, will release at TS: %ld, nbAnt %d\n", nsamps, t->nextRxTstamp+nsamps, nbAnt);
   // deliver data from received data
-  
-if ( t->typeStamp == UE_MAGICDL || t->typeStamp == ENB_MAGICDL && first_read == false) { 
-  if (t->buf[0].circularBuf != NULL) {
+
+  if (nb_ue ==0 && t->typeStamp == ENB_MAGICDL) {
+    if ( t->nextRxTstamp == 0)
+        LOG_I(HW, "No connected device, generating void samples...\n");
+
+      if (!flushInput(t, t->wait_timeout,  nsamps)) {
+        for (int x=0; x < nbAnt; x++)
+          memset(samplesVoid[x],0,sampleToByte(nsamps,1));
+
+        t->nextRxTstamp+=nsamps;
+
+        if ( ((t->nextRxTstamp/nsamps)%100) == 0)
+          LOG_D(HW, "No UE, Generating void samples for Rx: %ld\n", t->nextRxTstamp);
+
+        *ptimestamp = t->nextRxTstamp-nsamps;
+        return nsamps;
+      }
+    // else goto handlefirstconn;
+  } else {
+  if (t->buf[0].circularBuf != NULL ) {
 
     bool have_to_wait;
 
@@ -1223,7 +1278,7 @@ if ( t->typeStamp == UE_MAGICDL || t->typeStamp == ENB_MAGICDL && first_read == 
       
   }
   }
-
+  }
   // Clear the output buffer
   for (int a=0; a<nbAnt; a++)
     memset(samplesVoid[a],0,sampleToByte(nsamps,1));
